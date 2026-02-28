@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Square Hole Captcha</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f9f9f9;
+            font-family: 'Roboto', 'Segoe UI', Tahoma, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .captcha-window {
+            background: white;
+            width: 450px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            padding: 7px;
+            user-select: none;
+        }
+
+        .captcha-header {
+            background-color: #4a90e2;
+            color: white;
+            padding: 24px;
+            text-align: left;
+            margin-bottom: 7px;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .game-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 5px;
+        }
+
+        .board-layout {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            height: 120px;
+            position: relative;
+            align-items: center;
+            justify-items: center;
+            background: #f0f0f0;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+        }
+
+        .hole {
+            background: #2b1d1a;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.1);
+            font-weight: bold;
+            font-size: 0.6rem;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        .size-square { width: 60px; height: 60px; }
+        .size-circle { width: 55px; height: 55px; border-radius: 50%; }
+        .size-arch { width: 60px; height: 40px; border-top-left-radius: 30px; border-top-right-radius: 30px; }
+        .size-rect { width: 20px; height: 70px; }
+        .size-tri { 
+            width: 0; height: 0; 
+            border-left: 30px solid transparent; border-right: 30px solid transparent; border-bottom: 55px solid #2b1d1a;
+            background: none; box-shadow: none;
+        }
+
+        .shape {
+            position: absolute;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.4));
+            transition: transform 0.1s;
+        }
+        .shape:active { cursor: grabbing; transform: scale(1.05); }
+
+        .shape-circle { background: #ea4335; }
+        .shape-arch { background: #4285f4; }
+        .shape-rect { background: #34a853; }
+        .shape-tri { 
+            background: none; border-bottom-color: #fbbc05; box-shadow: none; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.3));
+        }
+        .shape-square { background: #8e44ad; }
+
+        .captcha-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            margin-top: 5px;
+        }
+
+        .verify-btn {
+            background-color: #4a90e2;
+            color: white;
+            padding: 10px 24px;
+            font-weight: bold;
+            border-radius: 2px;
+            text-transform: uppercase;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .footer-icons {
+            display: flex;
+            gap: 15px;
+            color: #777;
+        }
+
+        .success-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: white;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .check-circle {
+            width: 80px;
+            height: 80px;
+            background: #34a853;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="captcha-window">
+        <div class="captcha-header">
+            <div class="header-title">
+                Put all the shapes in the correct hole
+            </div>
+        </div>
+
+        <div class="game-area">
+            <div class="board-layout" id="pool"></div>
+
+            <div class="board-layout" id="board">
+                <div class="hole size-circle">Circle</div>
+                <div class="hole size-arch">Arch</div>
+                <div class="hole size-square" id="target-square">SQUARE</div>
+                <div class="hole size-tri"></div>
+                <div class="hole size-rect"></div>
+            </div>
+        </div>
+
+        <div class="captcha-footer">
+            <div class="footer-icons">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </div>
+            <button class="verify-btn" id="verifyBtn">Verify</button>
+        </div>
+    </div>
+
+    <div id="successOverlay" class="success-overlay">
+        <div class="check-circle">✓</div>
+        <h2 class="text-2xl font-bold mb-2">Verification Complete</h2>
+
+    <script>
+        const pool = document.getElementById('pool');
+        const board = document.getElementById('board');
+        const successOverlay = document.getElementById('successOverlay');
+        const targetSquare = document.getElementById('target-square');
+
+        let isDragging = false;
+        let activeElement = null;
+        let startX, startY;
+        let initialX, initialY;
+        
+        const shapeConfigs = [
+            { id: 'circle', name: 'Circle', class: 'shape-circle size-circle', col: 0 },
+            { id: 'arch', name: 'Arch', class: 'shape-arch size-arch', col: 1 },
+            { id: 'square', name: 'Square', class: 'shape-square size-square', col: 2 },
+            { id: 'tri', name: 'Triangle', class: 'shape-tri size-tri', col: 3 },
+            { id: 'rect', name: 'Rectangle', class: 'shape-rect size-rect', col: 4 }
+        ];
+
+        let completedShapes = 0;
+
+        function initGame() {
+            pool.innerHTML = '';
+            completedShapes = 0;
+            
+            shapeConfigs.forEach(config => {
+                const el = document.createElement('div');
+                el.className = `shape ${config.class}`;
+                el.id = `obj-${config.id}`;
+                el.dataset.type = config.id;
+                
+                pool.appendChild(el);
+                
+                const colWidth = pool.offsetWidth / 5;
+                const leftPos = (config.col * colWidth) + (colWidth / 2);
+                
+                el.style.left = `${leftPos}px`;
+                el.style.top = `50%`;
+                el.style.transform = `translate(-50%, -50%)`;
+
+                el.addEventListener('mousedown', startDrag);
+                el.addEventListener('touchstart', startDrag);
+            });
+        }
+
+        function startDrag(e) {
+            if (isDragging) return;
+            isDragging = true;
+            activeElement = e.target;
+            
+            const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            
+            const rect = activeElement.getBoundingClientRect();
+            startX = clientX - rect.left;
+            startY = clientY - rect.top;
+            
+            initialX = activeElement.style.left;
+            initialY = activeElement.style.top;
+            
+            activeElement.style.transition = 'none';
+            activeElement.style.zIndex = '1000';
+        }
+
+        window.addEventListener('mousemove', drag);
+        window.addEventListener('touchmove', drag, { passive: false });
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('touchend', endDrag);
+
+        function drag(e) {
+            if (!isDragging || !activeElement) return;
+            if (e.type === 'touchmove') e.preventDefault();
+
+            const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+            const containerRect = activeElement.offsetParent.getBoundingClientRect();
+            
+            let x = clientX - containerRect.left - startX;
+            let y = clientY - containerRect.top - startY;
+
+            activeElement.style.left = `${x}px`;
+            activeElement.style.top = `${y}px`;
+            activeElement.style.transform = 'none';
+        }
+
+        function endDrag() {
+            if (!isDragging || !activeElement) return;
+            isDragging = false;
+
+            const shapeRect = activeElement.getBoundingClientRect();
+            const targetRect = targetSquare.getBoundingClientRect();
+
+            const dist = Math.hypot(
+                (shapeRect.left + shapeRect.width/2) - (targetRect.left + targetRect.width/2),
+                (shapeRect.top + shapeRect.height/2) - (targetRect.top + targetRect.height/2)
+            );
+
+            if (dist < 60) {
+                snapToSquare();
+            } else {
+                initGame();
+            }
+        }
+
+        function snapToSquare() {
+            const parentRect = activeElement.offsetParent.getBoundingClientRect();
+            const targetRect = targetSquare.getBoundingClientRect();
+            const shapeRect = activeElement.getBoundingClientRect();
+
+            const snapX = (targetRect.left - parentRect.left) + (targetRect.width/2 - shapeRect.width/2);
+            const snapY = (targetRect.top - parentRect.top) + (targetRect.height/2 - shapeRect.height/2);
+            
+            activeElement.style.transition = 'all 0.3s ease-out';
+            activeElement.style.left = `${snapX}px`;
+            activeElement.style.top = `${snapY}px`;
+            activeElement.style.opacity = '0';
+            activeElement.style.pointerEvents = 'none';
+
+            completedShapes++;
+            if (completedShapes === shapeConfigs.length) {
+                setTimeout(() => {
+                    successOverlay.style.display = 'flex';
+                }, 600);
+            }
+        }
+
+        function resetGame() {
+            successOverlay.style.display = 'none';
+            initGame();
+        }
+
+        window.onload = initGame;
+    </script>
+</body>
+</html>
